@@ -28,7 +28,7 @@ input[type=text],input[type=password]{width:100%;padding:.55rem .7rem;border-rad
 input:focus,select:focus{outline:none;border-color:#3b82f6}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e3a5f;border:1px solid #3b82f6;border-radius:10px;padding:.6rem 1.2rem;color:#93c5fd;font-weight:700;font-size:.85rem;z-index:9999;white-space:nowrap;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
-#loading-screen{position:fixed;inset:0;background:#080c14;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:1rem}
+#loading-screen{position:fixed;inset:0;background:#080c14;display:flex;align-items:center;justify-content:center;z-index:9998;flex-direction:column;gap:1rem}
 .spinner{width:36px;height:36px;border:3px solid #1e2a40;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;align-items:center;justify-content:center;padding:1rem}
@@ -65,7 +65,19 @@ select option{background:#0f1623;color:#e2e8f0}
 </head>
 <body>
 
-<div id="loading-screen">
+<!-- SYSTEM LOGIN -->
+<div id="sys-login" style="position:fixed;inset:0;background:#080c14;z-index:99999;display:flex;align-items:center;justify-content:center">
+  <div style="background:#0f1623;border:1px solid #1e2a40;border-radius:16px;padding:2rem;width:90%;max-width:320px;text-align:center">
+    <div style="font-size:2rem;margin-bottom:.5rem">⬡</div>
+    <div style="font-weight:900;font-size:1.1rem;margin-bottom:.25rem">הסידור הגלוי</div>
+    <div style="color:#64748b;font-size:.75rem;margin-bottom:1.25rem">כניסה למערכת</div>
+    <input type="password" id="sys-pw" placeholder="סיסמה..." style="width:100%;padding:.65rem .8rem;border-radius:8px;background:#080c14;border:1px solid #243048;color:#e2e8f0;font-family:Heebo,sans-serif;font-size:.9rem;margin-bottom:.5rem;text-align:center" onkeydown="if(event.key==='Enter')sysLogin()">
+    <div id="sys-pw-err" style="color:#fca5a5;font-size:.78rem;margin-bottom:.5rem;display:none">❌ סיסמה שגויה</div>
+    <button onclick="sysLogin()" style="width:100%;padding:.7rem;border-radius:8px;background:#2563eb;color:white;border:none;font-family:Heebo,sans-serif;font-size:.9rem;font-weight:700;cursor:pointer">כניסה →</button>
+  </div>
+</div>
+
+<div id="loading-screen" style="display:none">
   <div style="font-size:2rem">⬡</div>
   <div class="spinner"></div>
   <div style="color:#64748b;font-size:.85rem">מתחבר ל-Firebase...</div>
@@ -349,13 +361,28 @@ const HOLIDAY_TEXT={chag:'#c4b5fd',tzom:'#94a3b8',erev:'#fcd34d',chol_moed:'#a78
 
 function getHoliday(day,month){return JEWISH_HOLIDAYS[`${day}-${month}`]||null;}
 
+// Chag types treated like Shabbat for staffing purposes
+const CHAG_LIKE_SAT=new Set(['chag']);
+const CHAG_LIKE_FRI=new Set(['erev']);
+function isChagSat(h){return h&&CHAG_LIKE_SAT.has(h.type);}
+function isChagFri(h){return h&&CHAG_LIKE_FRI.has(h.type);}
 function buildScheduleDays(){
   const today=new Date();let y=today.getFullYear(),m=today.getMonth()+2;
   if(m>12){m=1;y++;}
   const days=[];const dim=new Date(y,m,0).getDate();
-  for(let i=1;i<=dim;i++){const jd=new Date(y,m-1,i).getDay();days.push({day:i,month:m,year:y,label:`${i}/${m}`,jsDay:jd,isWeekend:jd===5||jd===6,isFri:jd===5,isSat:jd===6,holiday:getHoliday(i,m)});}
+  for(let i=1;i<=dim;i++){
+    const jd=new Date(y,m-1,i).getDay();
+    const h=getHoliday(i,m);
+    // treat chag like sat, erev chag like fri
+    const effectiveSat=jd===6||isChagSat(h);
+    const effectiveFri=jd===5||isChagFri(h);
+    const effectiveWeekend=effectiveSat||effectiveFri;
+    days.push({day:i,month:m,year:y,label:`${i}/${m}`,jsDay:jd,
+      isWeekend:effectiveWeekend,isFri:effectiveFri,isSat:effectiveSat,
+      realWeekend:jd===5||jd===6,holiday:h});
+  }
   const last=days[days.length-1];
-  if(last.jsDay!==6){let d=last.day+1,mo=m,yr=y;while(true){if(d>new Date(yr,mo,0).getDate()){d=1;mo++;if(mo>12){mo=1;yr++;}}const jd=new Date(yr,mo-1,d).getDay();days.push({day:d,month:mo,year:yr,label:`${d}/${mo}`,jsDay:jd,isWeekend:jd===5||jd===6,isFri:jd===5,isSat:jd===6,holiday:getHoliday(d,mo)});if(jd===6)break;d++;}}
+  if(last.jsDay!==6){let d=last.day+1,mo=m,yr=y;while(true){if(d>new Date(yr,mo,0).getDate()){d=1;mo++;if(mo>12){mo=1;yr++;}}const jd=new Date(yr,mo-1,d).getDay();const h=getHoliday(d,mo);const effectiveSat=jd===6||isChagSat(h);const effectiveFri=jd===5||isChagFri(h);days.push({day:d,month:mo,year:yr,label:`${d}/${mo}`,jsDay:jd,isWeekend:effectiveSat||effectiveFri,isFri:effectiveFri,isSat:effectiveSat,realWeekend:jd===5||jd===6,holiday:h});if(jd===6||effectiveSat)break;d++;}}
   return days;
 }
 const SCHEDULE_DAYS=buildScheduleDays();
@@ -424,6 +451,21 @@ function nav(page){
 }
 
 window._appInit = function(){window._appReady=true;window._currentPage='home';nav('home');};
+const SYS_PW='HSM2026';
+function sysLogin(){
+  const pw=document.getElementById('sys-pw').value;
+  if(pw===SYS_PW){
+    document.getElementById('sys-login').style.display='none';
+    document.getElementById('loading-screen').style.display='flex';
+    sessionStorage.setItem('sys_auth','1');
+  } else {
+    document.getElementById('sys-pw-err').style.display='block';
+    document.getElementById('sys-pw').value='';
+    document.getElementById('sys-pw').focus();
+  }
+}
+// Auto-login if already authenticated in this session
+(function(){if(sessionStorage.getItem('sys_auth')==='1'){document.getElementById('sys-login').style.display='none';document.getElementById('loading-screen').style.display='flex';}else{document.getElementById('sys-pw').focus();}})();
 
 // ══════ HOME ══════
 window._renderHome = function(){
@@ -787,7 +829,10 @@ g('modal').addEventListener('click',e=>{if(e.target===g('modal'))closeModal();})
 function canAssign(name,day,month,shKey,usedToday,monthC,wkC,lastS,stuH,sunOff){
   const allC=get_allC(),allV=get_allV();
   const w=ROSTER.find(r=>r.name===name);if(!w||usedToday.has(name))return false;
-  const yr=SCHEDULE_DAYS[0]?.year||new Date().getFullYear(),jd=new Date(yr,month-1,day).getDay(),isFri=jd===5,isSat=jd===6,isSun=jd===0;
+  const yr=SCHEDULE_DAYS[0]?.year||new Date().getFullYear(),jd=new Date(yr,month-1,day).getDay(),isSun=jd===0;
+  const _dObj=SCHEDULE_DAYS.find(d=>d.day===day&&d.month===month);
+  const isFri=_dObj?_dObj.isFri:(jd===5);
+  const isSat=_dObj?_dObj.isSat:(jd===6);
   if(allV.some(v=>v.status==='approved'&&v.worker===name&&v.days?.some(d=>d.day===day&&d.month===month)))return false;
   if((allC[name]?.constraints||[]).some(c=>c.day===day&&c.month===month&&c.shiftKey===shKey&&c.type==='block'))return false;
   // no א after ג (consecutive)
